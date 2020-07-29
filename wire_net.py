@@ -1,15 +1,13 @@
 #%%
 import os
-
-# %%
 import pickle
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 
 # %%
+import tensorflow as tf
 from sklearn.metrics import r2_score
 from sklearn.model_selection import train_test_split
 from tensorflow.keras import backend as K
@@ -23,6 +21,23 @@ from utils.resBlock import res_block, res_block_org
 from utils.writeANNProperties import writeANNProperties
 
 ##########################
+class lr_log(tf.keras.callbacks.Callback):
+    # def on_train_batch_end(self, batch, log=None):
+    # print("wudi")
+
+    # def on_batch_end(self, batch, logs):
+    # logs.update({"lr": 199})
+    # print("lr:", self.model.optimizer._decayed_lr("float32").numpy())
+
+    def on_epoch_end(self, batch, log={}):
+        # def on_epoch_begin(self, batch, log={}):
+        log.update({"lr": self.model.optimizer._decayed_lr("float32").numpy()})
+        print(
+            "lr_decay:", self.model.optimizer._decayed_lr("float32").numpy(),
+        )
+
+
+#%%
 # Parameters
 n_neuron = 100
 branches = 3
@@ -36,9 +51,10 @@ batch_norm = False
 scaler = "Standard"  # 'Standard' 'MinMax'
 
 ##########################
+# DO NOT CHANGE THIS ORDER!!
+input_features = ["f", "zeta", "pv"]
 
 labels = []
-
 with open("GRI_species_order_lu13", "r") as f:
     labels = [a.rstrip() for a in f.readlines()]
 
@@ -53,11 +69,6 @@ labels.remove("N2")
 # labels.append('mu')
 # labels.append('alpha')
 
-
-# DO NOT CHANGE THIS ORDER!!
-input_features = ["f", "zeta", "pv"]
-
-
 # read in the data
 X, y, df, in_scaler, out_scaler = read_h5_data(
     # "./data/tables_of_fgm.h5",
@@ -67,8 +78,6 @@ X, y, df, in_scaler, out_scaler = read_h5_data(
     i_scaler="no",
     o_scaler="cbrt_std",
 )
-# ('./data/tables_of_fgm.h5',key='of_tables',
-# in_labels=input_features, labels = labels,scaler=scaler)
 
 # split into train and test data
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.01)
@@ -98,24 +107,6 @@ predictions = Dense(dim_label, activation="linear")(x)
 
 model = Model(inputs=inputs, outputs=predictions)
 
-learning_rate = 1e-3
-# global_step = 1000
-first_decay_steps = 137
-# first_decay_steps = np.ceil(epoch_size / batch_size)
-# lr_decayed = tf.keras.experimental.cosine_decay_restarts(learning_rate, global_step,
-#                                    first_decay_steps)
-lr_decayed = tf.keras.experimental.CosineDecayRestarts(
-    learning_rate, first_decay_steps, t_mul=2
-)
-
-
-model.compile(
-    loss="mse",
-    optimizer=tf.keras.optimizers.Adam(learning_rate=lr_decayed),
-    # optimizer=tf.keras.optimizers.RMSprop(),
-    # optimizer=tf.keras.optimizers.SGD(learning_rate=lr_decayed, momentum=0.9),
-    metrics=["accuracy"],
-)
 # get the model summary
 model.summary()
 
@@ -123,9 +114,9 @@ model.summary()
 batch_size_list = [
     # batch_size,
     batch_size * 64,
-    # batch_size * 16,
+    # batch_size * 32,
+    # batch_size * 8,
     # batch_size * 4,
-    # batch_size
 ]
 
 for this_batch in batch_size_list:
@@ -145,35 +136,26 @@ for this_batch in batch_size_list:
         mode="min",
         period=10,
     )
-    epoch_size = X_train.shape[0]
-    a = 0
-    base = 2
-    clc = 2
-    for i in range(6):
-        a += base * clc ** (i)
-    print(a)
-    epochs, c_len = a, base
-    schedule = SGDRScheduler(
-        min_lr=1e-5,
-        max_lr=1e-3,
-        steps_per_epoch=np.ceil(epoch_size / batch_size),
-        cycle_length=c_len,
-        lr_decay=0.8,
-        mult_factor=clc,
+
+    base = 8
+    _t_mul = 2
+    epochs = sum([base * _t_mul ** i for i in range(3)])
+
+    learning_rate = 1e-4
+    first_decay_steps = base * np.ceil(X_train.shape[0] * (1 - vsplit) / this_batch)
+    lr_decayed = tf.keras.experimental.CosineDecayRestarts(
+        learning_rate, first_decay_steps, t_mul=_t_mul
     )
+    # lr_decayed.alpha = 0.01
+    lr_decayed._m_mul = 0.8
 
-    class lr_log(tf.keras.callbacks.Callback):
-        # def on_train_batch_end(self, batch, log=None):
-        # print("wudi")
-
-        def on_epoch_end(self, batch, log={}):
-            log.update({"lr": self.model.optimizer._decayed_lr("float32").numpy()})
-            print(
-                "lr_decay:",
-                self.model.optimizer._decayed_lr("float32").numpy(),
-                "lr:",
-                # self.model.optimizer.lr(),
-            )
+    model.compile(
+        loss="mse",
+        # optimizer=tf.keras.optimizers.Adam(learning_rate=lr_decayed),
+        optimizer=tf.keras.optimizers.SGD(learning_rate=lr_decayed, momentum=0.9),
+        # optimizer=tf.keras.optimizers.RMSprop(),
+        metrics=["accuracy"],
+    )
 
     # callbacks_list = [checkpoint, schedule, lr_log()]
     callbacks_list = [checkpoint, lr_log()]
@@ -190,7 +172,7 @@ for this_batch in batch_size_list:
         shuffle=True,
     )
 
-# plt.plot(history.history["lr"])
+plt.plot(history.history["lr"])
 #%%
 
 
@@ -283,8 +265,6 @@ with open("out_scaler.pkl", "rb") as f:
 # %%
 a.inverse_transform(y)
 
-# %%
-import tensorflow as tf
 
 learning_rate = 1e-3
 global_step = 1000

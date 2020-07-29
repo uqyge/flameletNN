@@ -1,10 +1,13 @@
-#%%
+# %%
+import pickle
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objs as go
 import scipy.signal as ss
+import tensorflow as tf
 from plotly.subplots import make_subplots
 
 from utils.data_reader import read_h5_data
@@ -30,7 +33,9 @@ x, y, df, in_scaler, out_scaler = read_h5_data(
 df["zetaLevel"] = df.zeta.apply(str)
 df_filtered = df.copy()
 
-#%%
+# %%
+
+
 def wireframe_html(df, df_filtered, sp, filtered=False):
     df = df
     df_filtered = df_filtered
@@ -80,12 +85,12 @@ def wireframe_html(df, df_filtered, sp, filtered=False):
         y_grid = df_z0.pv.values.reshape(501, 501)
         z_grid = df_z0[sp].values.reshape(501, 501)
         # if (filtered == True) and zetaLevel not in ["0.0"]:
-        if (filtered == True):
-            if zetaLevel in ["0.0","0.11"]:
+        if filtered == True:
+            if zetaLevel in ["0.0", "0.11"]:
                 z_grid_filtered = ss.savgol_filter(z_grid, 7, 4)
             else:
                 z_grid_filtered = ss.savgol_filter(z_grid, 31, 4)
-            ## update filtered values
+            # update filtered values
             df_filtered.loc[
                 df_filtered.zetaLevel == zetaLevel, sp
             ] = z_grid_filtered.reshape(-1, 1)
@@ -103,9 +108,9 @@ def wireframe_html(df, df_filtered, sp, filtered=False):
         fig.write_html(f"./wireframe/{sp}_wire.html")
 
 
-#%%
-for i in range(0,3):
-    print("i = ",i)
+# %%
+for i in range(0, 3):
+    print("i = ", i)
     df = df_filtered.copy()
     # labelList = labels13+['T','PVs']
     labelList = labels
@@ -115,10 +120,8 @@ for i in range(0,3):
         print(f"{sp[0]+1}/{len(labelList)},{sp[1]}")
         wireframe_html(df=df, df_filtered=df_filtered, sp=sp[1], filtered=True)
 
-
-    df_filtered.drop("zetaLevel",axis=1,inplace=True)
+    df_filtered.drop("zetaLevel", axis=1, inplace=True)
     df_filtered = df_filtered.clip(lower=0)
-
 
     # df_filtered["zetaLevel"]=df["zetaLevel"]
     df_filtered["zetaLevel"] = df_filtered.zeta.apply(str)
@@ -131,8 +134,8 @@ df_filtered.to_parquet("df_filtered.parquet")
 f_id = -1
 zetaLevel = "0.44"
 # for sp in labels13+['PVs']:
-for sp in [ "PVs", "O",'HO2','CH3']:
-# for sp in ["PVs", "CH2O","CH3","O"]:
+for sp in ["PVs", "O", "HO2", "CH3"]:
+    # for sp in ["PVs", "CH2O","CH3","O"]:
     val_org = df[df.zetaLevel == zetaLevel][sp].values.reshape(501, 501)
     # val_filtered = ss.savgol_filter(val_org, 31, 4)
     val_filtered = df_filtered[df_filtered.zetaLevel == zetaLevel][sp].values.reshape(
@@ -148,62 +151,61 @@ for sp in [ "PVs", "O",'HO2','CH3']:
 # %%
 
 # %%
-%%time
+
 # a = pd.read_hdf('df_test.h5')
-dataFile='./data/tables_of_fgm.h5'
+dataFile = "./data/tables_of_fgm.h5"
 a = pd.read_hdf(dataFile)
 # %%
-a.to_parquet('tables_of_fgm.parquet')
+a.to_parquet("tables_of_fgm.parquet")
 # a.to_hdf('df_test.h5',key='hdf')
 # %%
-%%time
-b = pd.read_parquet('tables_of_fgm.parquet')
+
+b = pd.read_parquet("tables_of_fgm.parquet")
 # b = pd.read_hdf('df_test.h5')
 b.shape
 # %%
-dataFile.split('.')[-1]=='h5'
+dataFile.split(".")[-1] == "h5"
 
 # %%
 df_filtered.shape
 
 # %%
-df_filtered.drop("zetaLevel",axis=1,inplace=True)
+df_filtered.drop("zetaLevel", axis=1, inplace=True)
 df_filtered = df_filtered.clip(lower=0)
 df_filtered.to_parquet("df_filtered.parquet")
 # %%
-df_filtered = pd.read_parquet('df_filtered.parquet')
-df_filtered['zetaLevel'] = df['zetaLevel']
+df_filtered = pd.read_parquet("df_filtered.parquet")
+df_filtered["zetaLevel"] = df["zetaLevel"]
 
 
-#%%
-import tensorflow as tf
-import pickle
-
-
-with open('out_scaler.pkl','rb') as f:
+with open("out_scaler.pkl", "rb") as f:
     out_scaler = pickle.load(f)
 
-model = tf.keras.models.load_model('wudi_4x100.h5')
+model = tf.keras.models.load_model("wudi_4x100.h5")
 
 # %%
 x = df[input_features].values
-pred_org=model.predict(x,batch_size=1024)
+pred_org = model.predict(x, batch_size=1024)
 
 # %%
-out_sps = labels13+['T','PVs']
-out_sps.remove('N2')
-
-
-# %%
-df_pred=pd.DataFrame(out_scaler.inverse_transform(pred_org),columns=out_sps)
-
-df_model=pd.concat([df[input_features],df_pred],axis=1)
-df_model['zetaLevel']=df_model.zeta.apply(str)
-# %%
+out_sps = labels13 + ["T", "PVs"]
+out_sps.remove("N2")
 
 
 # %%
-px.scatter_3d(data_frame=df_model[df_model.zetaLevel=="0.0"].sample(n=10_000),x='f',y='pv',z='PVs'
+df_pred = pd.DataFrame(out_scaler.inverse_transform(pred_org), columns=out_sps)
+
+df_model = pd.concat([df[input_features], df_pred], axis=1)
+df_model["zetaLevel"] = df_model.zeta.apply(str)
+# %%
+
+
+# %%
+px.scatter_3d(
+    data_frame=df_model[df_model.zetaLevel == "0.0"].sample(n=10_000),
+    x="f",
+    y="pv",
+    z="PVs",
 )
 
 # %%
