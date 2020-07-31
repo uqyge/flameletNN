@@ -39,7 +39,7 @@ class lr_log(tf.keras.callbacks.Callback):
 
 #%%
 # Parameters
-n_neuron = 100
+n_neuron = 96 * 3
 branches = 3
 scale = 3
 batch_size = 256
@@ -101,7 +101,7 @@ x = res_block_org(x, n_neuron, stage=1, block="b", bn=batch_norm)
 x = res_block_org(x, n_neuron, stage=1, block="c", bn=batch_norm)
 x = res_block_org(x, n_neuron, stage=1, block="d", bn=batch_norm)
 
-x = Dense(100, activation="relu")(x)
+x = Dense(96, activation="relu")(x)
 
 predictions = Dense(dim_label, activation="linear")(x)
 
