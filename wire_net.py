@@ -5,8 +5,6 @@ import pickle
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
-# %%
 import tensorflow as tf
 from sklearn.metrics import r2_score
 from sklearn.model_selection import train_test_split
@@ -17,8 +15,9 @@ from tensorflow.keras.models import Model, load_model
 
 from utils.customObjects import SGDRScheduler, coeff_r2
 from utils.data_reader import read_h5_data
-from utils.resBlock import res_block, res_block_org
+from utils.resBlock import res_block, res_block_org, res_block_btn
 from utils.writeANNProperties import writeANNProperties
+
 
 ##########################
 class lr_log(tf.keras.callbacks.Callback):
@@ -39,7 +38,7 @@ class lr_log(tf.keras.callbacks.Callback):
 
 #%%
 # Parameters
-n_neuron = 96 * 3
+n_neuron = 96 * 2
 branches = 3
 scale = 3
 batch_size = 256
@@ -72,7 +71,8 @@ labels.remove("N2")
 # read in the data
 X, y, df, in_scaler, out_scaler = read_h5_data(
     # "./data/tables_of_fgm.h5",
-    "./data/df_filtered_3.parquet",
+    # "./data/df_filtered_3.parquet",
+    "./data/df_interpolation.parquet",
     input_features=input_features,
     labels=labels,
     i_scaler="no",
@@ -96,10 +96,18 @@ inputs = Input(shape=(dim_input,))  # ,name='input_1')
 # a layer instance is callable on a tensor, and returns a tensor
 x = Dense(n_neuron, activation="relu")(inputs)
 
-x = res_block_org(x, n_neuron, stage=1, block="a", bn=batch_norm)
-x = res_block_org(x, n_neuron, stage=1, block="b", bn=batch_norm)
-x = res_block_org(x, n_neuron, stage=1, block="c", bn=batch_norm)
-x = res_block_org(x, n_neuron, stage=1, block="d", bn=batch_norm)
+# x = res_block_org(x, n_neuron, stage=1, block="a", bn=batch_norm)
+## x = Dense(96, activation="relu")(x)
+# x = res_block_org(x, n_neuron, stage=1, block="b", bn=batch_norm)
+# x = res_block_org(x, n_neuron, stage=1, block="c", bn=batch_norm)
+# x = res_block_org(x, n_neuron, stage=1, block="d", bn=batch_norm)
+
+x = res_block_btn(x, n_neuron, stage=1, block="a", bn=batch_norm)
+# n_neuron = n_neuron / 2
+# x = Dense(n_neuron, activation="relu")(x)
+x = res_block_btn(x, n_neuron, stage=1, block="b", bn=batch_norm)
+x = res_block_btn(x, n_neuron, stage=1, block="c", bn=batch_norm)
+# x = res_block_btn(x, n_neuron, stage=1, block="d", bn=batch_norm)
 
 x = Dense(96, activation="relu")(x)
 
@@ -113,21 +121,16 @@ model.summary()
 # WARM RESTART
 batch_size_list = [
     # batch_size,
-    batch_size * 64,
+    # batch_size * 64,
     # batch_size * 32,
-    # batch_size * 8,
-    # batch_size * 4,
+    # batch_size * 16,
+    batch_size * 4,
+    # batch_size * 2,
 ]
 
 for this_batch in batch_size_list:
-    # checkpoint (save the best model based validate loss)
+
     filepath = "./tmp/weights.best.cntk.hdf5"
-
-    # check if there are weights
-    if os.path.isfile(filepath):
-        print("read model")
-        model.load_weights(filepath)
-
     checkpoint = ModelCheckpoint(
         filepath,
         monitor="val_loss",
@@ -137,11 +140,14 @@ for this_batch in batch_size_list:
         period=10,
     )
 
-    base = 8
-    _t_mul = 2
+    if os.path.isfile(filepath):
+        print("read model")
+        model.load_weights(filepath)
+
+    base, _t_mul = 10, 2
     epochs = sum([base * _t_mul ** i for i in range(3)])
 
-    learning_rate = 1e-4
+    learning_rate = 1e-3
     first_decay_steps = base * np.ceil(X_train.shape[0] * (1 - vsplit) / this_batch)
     lr_decayed = tf.keras.experimental.CosineDecayRestarts(
         learning_rate, first_decay_steps, t_mul=_t_mul
@@ -151,8 +157,9 @@ for this_batch in batch_size_list:
 
     model.compile(
         loss="mse",
+        # loss=tf.keras.losses.Huber(delta=3.0),
         # optimizer=tf.keras.optimizers.Adam(learning_rate=lr_decayed),
-        optimizer=tf.keras.optimizers.SGD(learning_rate=lr_decayed, momentum=0.9),
+        optimizer=tf.keras.optimizers.SGD(learning_rate=lr_decayed, momentum=0.99),
         # optimizer=tf.keras.optimizers.RMSprop(),
         metrics=["accuracy"],
     )
@@ -169,14 +176,11 @@ for this_batch in batch_size_list:
         validation_split=vsplit,
         verbose=2,
         callbacks=callbacks_list,
-        shuffle=True,
+        # shuffle=False,
     )
 
 plt.plot(history.history["lr"])
 #%%
-
-
-# # %%
 predict_val = model.predict(X_test)
 
 X_test_df = pd.DataFrame(in_scaler.inverse_transform(X_test), columns=input_features)
@@ -235,7 +239,7 @@ writeANNProperties(in_scaler, out_scaler, scaler)
 # run -i k2tf.py --input_model='FPV_ANN_tabulated_Standard.H5' --output_model='exported/FPV_ANN_tabulated_Standard.pb'
 
 #%%
-model.save("wudi_4x100.h5")
+model.save("wudi_2x192.h5")
 
 # %%
 
